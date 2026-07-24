@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Block Loot">
+<title>Infinite Block Loot</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; overflow:hidden; background:#0b0e14; font-family:-apple-system,Segoe UI,Roboto,sans-serif; color:#e7ecf3; touch-action:none; }
+  #game { display:block; position:absolute; inset:0; cursor:crosshair; }
+
+  .panel { position:absolute; background:rgba(16,20,28,.86); border:1px solid #2a3342; border-radius:12px; backdrop-filter:blur(6px); }
+  #hud { top:calc(12px + env(safe-area-inset-top)); left:calc(12px + env(safe-area-inset-left)); padding:12px 14px; min-width:190px; }
+  #hud .ammo { font-size:30px; font-weight:800; color:#ffd35c; line-height:1; }
+  #hud .ammo small { font-size:12px; font-weight:600; color:#b9c2d0; }
+  #hud .row { display:flex; justify-content:space-between; font-size:12px; margin-top:8px; color:#b9c2d0; }
+  #hud .row b { color:#e7ecf3; font-weight:700; }
+  #hud .empire { margin-top:10px; font-size:13px; }
+  #hud .empire b { color:#5fd08a; }
+
+  #ctrl { top:calc(12px + env(safe-area-inset-top)); right:calc(12px + env(safe-area-inset-right)); padding:12px 14px; width:230px; }
+  #ctrl label { font-size:12px; color:#b9c2d0; display:block; margin-bottom:4px; }
+  #ctrl .rtpval { color:#ffd35c; font-weight:800; }
+  #ctrl input[type=range] { width:100%; accent-color:#ffd35c; }
+  #ctrl .hint { font-size:11px; color:#8a94a5; margin-top:6px; line-height:1.35; }
+  #ctrl .realized { font-size:12px; margin-top:10px; color:#b9c2d0; }
+  #ctrl .realized b { font-weight:800; }
+  #ctrl .btns { display:flex; gap:8px; margin-top:10px; }
+  #ctrl button { flex:1; background:#243044; color:#e7ecf3; border:1px solid #33415a; border-radius:8px; padding:7px; font-size:12px; font-weight:700; cursor:pointer; }
+  #ctrl button:hover { background:#2c3a52; }
+  #ctrl .peek { display:flex; align-items:center; gap:6px; margin-top:10px; font-size:12px; color:#b9c2d0; cursor:pointer; }
+
+  #help { bottom:calc(12px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); padding:8px 14px; font-size:12px; color:#9aa4b4; text-align:center; }
+  #help b { color:#cdd5e0; }
+
+  #over { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(6,8,12,.78); z-index:10; }
+  #over .box { text-align:center; }
+  #over h1 { font-size:34px; color:#ff6b6b; margin-bottom:8px; }
+  #over p { color:#b9c2d0; margin-bottom:18px; font-size:14px; }
+  #over button { background:#ffd35c; color:#1a1200; border:0; border-radius:10px; padding:12px 26px; font-size:15px; font-weight:800; cursor:pointer; }
+  #intro { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(6,8,12,.92); z-index:11; padding:22px; }
+  #intro .box { text-align:center; max-width:360px; }
+  #intro h1 { font-size:30px; color:#ffd35c; margin-bottom:14px; letter-spacing:.5px; }
+  #intro p { color:#c9d2df; margin-bottom:22px; font-size:14px; line-height:1.7; }
+  #intro b { color:#fff; }
+  #intro button { background:#ffd35c; color:#1a1200; border:0; border-radius:10px; padding:13px 36px; font-size:16px; font-weight:800; cursor:pointer; }
+  #intro .note { color:#7d8798; font-size:11px; line-height:1.5; margin:20px auto 0; max-width:320px; }
+  #intro .note b { color:#aeb7c6; }
+  /* --- narrow / portrait phone layout: compact panels so they don't overlap --- */
+  @media (max-width: 520px){
+    #hud { padding:8px 10px; min-width:0; }
+    #hud .ammo { font-size:22px; }
+    #hud .empire, #hud .row { font-size:11px; }
+    #ctrl { padding:8px 10px; width:168px; }
+    #ctrl label, #ctrl .realized, #ctrl .peek { font-size:11px; }
+    #ctrl .hint { display:none; }        /* hide the long RTP note on phones */
+    #ctrl button { padding:6px; font-size:11px; }
+    #help { display:none; }              /* intro already explains controls */
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="intro"><div class="box">
+  <h1>💎 Infinite Block Loot</h1>
+  <p><b>Tap</b> tiles to conquer territory · <b>Hold</b> to auto-fire · <b>Drag</b> to pan<br>Clear whole regions and crack rainbow 💎 diamonds for big loot.<br>Watch your ammo — don't run dry!</p>
+  <button id="play">Play</button>
+  <p class="note">Your progress saves automatically. On <b>iPhone Safari</b>, Apple may clear it when you fully close the app — keep the tab open, or play in Chrome, to be safe.</p>
+</div></div>
+
+<div id="hud" class="panel">
+  <div class="ammo"><span id="ammo">100</span> <small>AMMO</small></div>
+  <div class="empire">Empire: <b id="empire">1</b> <small style="color:#8a94a5">cells</small> · Regions: <b id="regions" style="color:#ffd35c">0</b></div>
+  <div class="row"><span>Spent</span><b id="spent">0</b></div>
+  <div class="row"><span>Earned</span><b id="earned">0</b></div>
+  <div class="row"><span>Net</span><b id="net">0</b></div>
+</div>
+
+<div id="ctrl" class="panel">
+  <label>Set RTP: <span class="rtpval"><span id="rtpv">100</span>%</span></label>
+  <input id="rtp" type="range" min="50" max="150" value="100" step="1">
+  <div class="hint">Expected ammo returned per ammo spent. &lt;100% = you bleed out (faster). 100% = break-even but variance still busts you eventually (gambler's ruin). &gt;100% = you grow.</div>
+  <div class="realized">Realized RTP: <b id="realized" style="color:#5fd08a">—</b></div>
+  <label class="peek"><input type="checkbox" id="peek"> Peek (show hidden taps / reward)</label>
+  <div class="btns"><button id="center">🏠 Center</button><button id="restart">Restart</button></div>
+</div>
+
+<div id="help" class="panel">
+  <b>Tap</b> an adjacent square to shoot it (1 ammo/tap) &nbsp;·&nbsp; <b>Hold</b> to auto-fire &nbsp;·&nbsp; <b>Drag</b> to pan &nbsp;·&nbsp; hidden taps to conquer, hidden ammo reward &nbsp;·&nbsp; don't hit 0
+</div>
+
+<div id="over"><div class="box">
+  <h1>OUT OF AMMO</h1>
+  <p id="overstat"></p>
+  <div style="display:flex; gap:12px; justify-content:center; margin-top:4px;">
+    <button id="newmap" style="background:#2a3342; color:#e7ecf3;">New Map</button>
+    <button id="continue">Continue +100</button>
+  </div>
+</div></div>
+
+<script>
+(function(){
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const START_AMMO = 100, MAC = 4, HOLDBACK = 0.5;
+  const SAVE_KEY = 'ibl_save_v1';   // localStorage slot — bump the suffix to invalidate old saves
+  const MINZOOM = 2, MAXZOOM = 80;  // px per cell — MINZOOM lets you pull way out to see the whole empire
+  const OVER_CELL = 12;             // below this the board flips to flat, unclickable "overview" mode
+  const overview = () => CELL < OVER_CELL;
+  let CELL = 46;   // mutable so pinch / wheel can zoom
+  let W, H, DPR;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio||1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = W*DPR; cv.height = H*DPR; cv.style.width=W+'px'; cv.style.height=H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize); resize();
+
+  // ---- world state ----
+  let SEED, ammo, spent, earned, conquered, taps, camX, camY, rtp, gameOver, floaters, clearedSectors, takenGems, gemTaps, clearFx;
+  function init(){
+    SEED = Math.floor(Math.random()*100000);
+    ammo = START_AMMO; spent = 0; earned = 0;
+    conquered = new Set(['0,0']);
+    clearedSectors = new Set();
+    takenGems = new Set();
+    gemTaps = new Map();
+    _vkCache.clear(); _compCache.clear(); _colorCache.clear(); _baseCache.clear(); _regionCache.clear();
+    taps = new Map();          // "x,y" -> taps done so far
+    camX = 0; camY = 0; CELL = 46;   // reset view + zoom
+    gameOver = false; floaters = []; clearFx = [];
+    document.getElementById('over').style.display='none';
+    sync(); save();                      // persist the fresh map right away
+  }
+  rtp = 100;
+
+  // ---- persistence (localStorage) ----
+  // Sets → arrays and Maps → entry-lists so the whole world round-trips through JSON.
+  function save(){
+    try{
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        v:1, SEED, ammo, spent, earned, rtp, camX, camY, CELL, gameOver,
+        conquered:[...conquered], clearedSectors:[...clearedSectors],
+        takenGems:[...takenGems], gemTaps:[...gemTaps], taps:[...taps]
+      }));
+    }catch(e){}                          // private mode / quota / sandbox → just skip saving
+  }
+  let _saveT = 0;
+  function saveThrottled(){ const n=performance.now(); if(n-_saveT>2000){ _saveT=n; save(); } }
+  function loadSave(){
+    let d; try{ const s=localStorage.getItem(SAVE_KEY); if(!s) return false; d=JSON.parse(s); }catch(e){ return false; }
+    if(!d || d.v!==1) return false;
+    try{
+      SEED=d.SEED; ammo=d.ammo; spent=d.spent; earned=d.earned;
+      rtp = typeof d.rtp==='number' ? d.rtp : 100;
+      camX=d.camX||0; camY=d.camY||0; CELL=d.CELL||46;
+      conquered=new Set(d.conquered||['0,0']);
+      clearedSectors=new Set(d.clearedSectors||[]);
+      takenGems=new Set(d.takenGems||[]);
+      gemTaps=new Map(d.gemTaps||[]);
+      taps=new Map(d.taps||[]);
+      _vkCache.clear(); _compCache.clear(); _colorCache.clear(); _baseCache.clear(); _regionCache.clear();
+      gameOver=!!d.gameOver; floaters=[]; clearFx=[];
+      const rs=document.getElementById('rtp'), rv=document.getElementById('rtpv');
+      if(rs) rs.value=rtp; if(rv) rv.textContent=rtp;                 // reflect restored RTP in the slider
+      const ov=document.getElementById('over'); ov.style.display = gameOver ? 'flex' : 'none';
+      if(gameOver) document.getElementById('overstat').textContent =
+        `${conquered.size} tiles conquered · ${clearedSectors.size} regions cleared`;
+      sync();
+      return true;
+    }catch(e){ return false; }           // corrupt save → fall back to a fresh game
+  }
+
+  // deterministic per-cell pseudo-random in [0,1)
+  function rnd(x,y,salt){
+    let s = Math.sin(x*127.1 + y*311.7 + salt*74.7 + SEED*13.13) * 43758.5453;
+    return s - Math.floor(s);
+  }
+  const NORM = 0.12*4.5 + 0.88*0.6; // ~1.068, keeps loot mean ~1 so RTP is honest
+  // hidden cost (taps) — grows & gets more variable with distance from center
+  // jackpot "gems" are square tiles (1×1 … 4×4), each ONE unified block.
+  // Exactly ONE gem per 9×9 block (jittered) → evenly scattered, no big empty patches.
+  const GB=9;
+  function gemForBlock(bx,by){                              // the single gem occupying 9×9 block (bx,by), or null
+    if(bx===0 && by===0) return null;                       // keep the home block clear
+    const r2=rnd(bx,by,62), sz=1+Math.floor(r2*r2*4);       // 1..4, biased small
+    const ax=bx*GB+Math.floor(rnd(bx,by,63)*(GB-sz+1));
+    const ay=by*GB+Math.floor(rnd(bx,by,64)*(GB-sz+1));
+    if(ax<=1 && ax+sz-1>=-1 && ay<=1 && ay+sz-1>=-1) return null;   // never overlap the 3×3 home region
+    return {ax,ay,sz};
+  }
+  function gemAt(x,y){
+    const g=gemForBlock(Math.floor(x/GB), Math.floor(y/GB));
+    return (g && x>=g.ax && x<g.ax+g.sz && y>=g.ay && y<g.ay+g.sz) ? g : null;
+  }
+  function isSpecial(x,y){ return gemAt(x,y)!==null; }
+  function gemKey(g){ return 'g:'+g.ax+','+g.ay; }
+  function gemCells(g){ const c=[]; for(let j=0;j<g.sz;j++)for(let i=0;i<g.sz;i++)c.push([g.ax+i,g.ay+j]); return c; }
+  function gemCenter(g){ return [g.ax+(g.sz-1>>1), g.ay+(g.sz-1>>1)]; }
+  function gemCost(g){ const c=gemCenter(g), ring=Math.max(Math.abs(c[0]),Math.abs(c[1])); const v=0.8+rnd(g.ax,g.ay,71)*0.6; return Math.round(((3+Math.floor(ring*0.35))*g.sz*g.sz*1.8 + 9)*v); }  // base floor lifts singles; per-gem variance; ∝ area
+  function gemReward(g){                                   // ALWAYS pays more than its taps (mult always > 1)
+    const rj=rnd(g.ax,g.ay,52), rm=rnd(g.ax,g.ay,53);
+    const mult = rj<0.1 ? (5+rm*8) : (1.3+rm*1.2);        // 1.3–2.5× normally, 5–13× on a ~10% jackpot
+    return Math.round(gemCost(g)*mult);
+  }
+  function gemTaken(g){ return takenGems.has(gemKey(g)); }
+  function gemAttackable(g){
+    if(gemTaken(g)) return false;
+    for(const cc of gemCells(g)) for(const [dx,dy] of NB) if(isConq(cc[0]+dx,cc[1]+dy)) return true;
+    return false;
+  }
+  function costOf(x,y){
+    const ring = Math.max(Math.abs(x),Math.abs(y));
+    let c = 2 + Math.floor(ring*0.35) + Math.floor(rnd(x,y,1)*3);  // gentle growth → stays affordable far out
+    if(isSpecial(x,y)) c *= 5;                                     // special = expensive to crack
+    return c;
+  }
+  function lootFactor(x,y){
+    const jack = rnd(x,y,3) < 0.12;
+    const r = rnd(x,y,2);
+    const raw = jack ? (3 + r*3) : (0.2 + r*0.8);
+    return raw / NORM;
+  }
+  // reward paid on conquest — scales with cost, current RTP, and this cell's loot roll
+  // per-square payout keeps only part of the return; the rest is "held back"
+  // and paid as the region-clear jackpot, so total return still obeys RTP
+  function rewardOf(x,y){
+    const base = costOf(x,y) * (rtp/100) * regionFactor(regionOf(x,y));
+    if(isSpecial(x,y)){
+      const mult = 4 + rnd(x,y,52)*4;               // 4–8× jackpot, paid in full (no holdback)
+      return Math.round(base * mult);
+    }
+    return Math.max(0, Math.round(base * lootFactor(x,y) * (1-HOLDBACK)));
+  }
+
+  const NB = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+  function isConq(x,y){ return conquered.has(x+','+y); }
+  function attackable(x,y){
+    if(isConq(x,y) || gemAt(x,y)) return false;
+    for(const [dx,dy] of NB){
+      const nx=x+dx, ny=y+dy;
+      if(isConq(nx,ny)) return true;
+      const g=gemAt(nx,ny);
+      if(g && gemAttackable(g)) return true;   // bridge across a reachable diamond → nothing gets trapped behind it
+    }
+    return false;
+  }
+  // Voronoi regions: one seed per macro-block, each cell joins its nearest seed →
+  // organic, irregular, varied-shape regions (no grid alignment)
+  function seedPos(mx,my){   // wide jitter → varied region sizes (small pieces auto-merge)
+    return [ mx*MAC + Math.floor(rnd(mx,my,21)*MAC), my*MAC + Math.floor(rnd(mx,my,22)*MAC) ];
+  }
+  const _vkCache=new Map(), _compCache=new Map(), _colorCache=new Map(), _baseCache=new Map(), _regionCache=new Map();
+  const CO=[[0,-1],[-1,0],[1,0],[0,1]];               // orthogonal neighbours for contiguity
+  function inHome(x,y){ return Math.abs(x)<=1 && Math.abs(y)<=1; }
+  function voronoiKey(x,y){
+    const kk=x+','+y; const hit=_vkCache.get(kk); if(hit!==undefined) return hit;
+    const mx=Math.floor(x/MAC), my=Math.floor(y/MAC);
+    const nx=x + (rnd(x,y,33)-0.5)*3, ny=y + (rnd(x,y,34)-0.5)*3;   // per-cell wobble → organic, non-blocky edges
+    let best=1e15, ox=mx, oy=my;
+    for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
+      const s=seedPos(mx+dx,my+dy);
+      const d=(s[0]-nx)*(s[0]-nx)+(s[1]-ny)*(s[1]-ny);
+      if(d<best){ best=d; ox=mx+dx; oy=my+dy; }
+    }
+    const v=ox+','+oy; _vkCache.set(kk,v); return v;
+  }
+  // a region = the ORTHOGONALLY-connected cluster of one Voronoi cell, excluding home & gems.
+  // (so a diamond that pinches off part of a Voronoi cell splits it into separate regions)
+  function component(x,y){
+    const start=x+','+y; const hit=_compCache.get(start); if(hit) return hit;
+    const vk=voronoiKey(x,y), seen=new Set([start]), stack=[[x,y]], cells=[[x,y]];
+    let mx=x, my=y; const B=14;
+    while(stack.length){
+      const cur=stack.pop();
+      for(const d of CO){
+        const nx=cur[0]+d[0], ny=cur[1]+d[1], k=nx+','+ny;
+        if(seen.has(k) || Math.abs(nx-x)>B || Math.abs(ny-y)>B || inHome(nx,ny) || gemAt(nx,ny) || voronoiKey(nx,ny)!==vk) continue;
+        seen.add(k); stack.push([nx,ny]); cells.push([nx,ny]);
+        if(ny<my || (ny===my && nx<mx)){ mx=nx; my=ny; }
+      }
+    }
+    const comp={cells, id:'C'+mx+','+my};             // id = top-left cell of the cluster
+    for(const c of cells) _compCache.set(c[0]+','+c[1], comp);
+    return comp;
+  }
+  const MIN=4;
+  function nbrComps(c){                     // distinct components orthogonally adjacent to c
+    const m=new Map();
+    for(const cell of c.cells) for(const d of CO){
+      const nx=cell[0]+d[0], ny=cell[1]+d[1];
+      if(inHome(nx,ny)||gemAt(nx,ny)) continue;
+      const nc=component(nx,ny);
+      if(nc.id!==c.id) m.set(nc.id,nc);
+    }
+    return [...m.values()];
+  }
+  // strict total order over components: more cells wins, ties broken by id → a unique "uphill" target
+  function compGreater(a,b){ return a.cells.length!==b.cells.length ? a.cells.length>b.cells.length : a.id>b.id; }
+  function bestNbr(c){ let best=null; for(const n of nbrComps(c)) if(!best||compGreater(n,best)) best=n; return best; }
+  // PASS 1 (component level): fold any sub-MIN component into its LARGEST neighbour, transitively,
+  // until we land on a region of >=MIN (or a local maximum). merges chains of small pieces together,
+  // so a fragment whose neighbours are *also* small no longer strands as its own region.
+  function rootComp(x,y){
+    let c=component(x,y); const guard=new Set();
+    while(c.cells.length<MIN && !guard.has(c.id)){
+      guard.add(c.id);
+      const b=bestNbr(c);
+      if(!b || !compGreater(b,c)) break;     // c is a local max → its smaller neighbours fold into it
+      c=b;
+    }
+    return c;
+  }
+  function baseKey(x,y){ if(inHome(x,y)) return 'H'; if(gemAt(x,y)) return 'GEM'; return rootComp(x,y).id; }
+  // cells of a pass-1 region, flooded along orthogonal neighbours (derived from baseKey → always consistent)
+  function baseCells(key){
+    const hit=_baseCache.get(key); if(hit) return hit;
+    if(key==='H'){ const c=[]; for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++)c.push([i,j]); _baseCache.set(key,c); return c; }
+    const p=key.slice(1).split(',').map(Number);
+    const seen=new Set([p[0]+','+p[1]]), stack=[[p[0],p[1]]], cells=[];
+    while(stack.length && cells.length<600){
+      const cur=stack.pop(); cells.push(cur);
+      for(const d of CO){
+        const nx=cur[0]+d[0], ny=cur[1]+d[1], k=nx+','+ny;
+        if(seen.has(k) || inHome(nx,ny) || gemAt(nx,ny)) continue;
+        seen.add(k);
+        if(baseKey(nx,ny)===key) stack.push([nx,ny]);
+      }
+    }
+    _baseCache.set(key,cells); return cells;
+  }
+  // pass-1 regions orthogonally adjacent to this one, as key→size
+  function baseNbrs(key){
+    const m=new Map();
+    for(const c of baseCells(key)) for(const d of CO){
+      const nx=c[0]+d[0], ny=c[1]+d[1];
+      if(inHome(nx,ny)||gemAt(nx,ny)) continue;
+      const k=baseKey(nx,ny); if(k!==key && !m.has(k)) m.set(k, baseCells(k).length);
+    }
+    return m;
+  }
+  // PASS 2 (region level): any pass-1 region still < MIN folds into its LARGEST neighbouring region,
+  // transitively. after pass 1 a straggler's neighbours are almost always full-size regions, so this
+  // clears the last holdouts — guaranteeing no conquerable region is smaller than MIN.
+  function regionOf(x,y){
+    const k0=baseKey(x,y); if(k0==='H'||k0==='GEM') return k0;
+    const hit=_regionCache.get(k0); if(hit!==undefined) return hit;
+    let key=k0, size=baseCells(key).length; const guard=new Set();
+    while(size<MIN && !guard.has(key)){
+      guard.add(key);
+      let bk=null, bs=-1;
+      for(const [nk,ns] of baseNbrs(key)) if(bk===null || ns>bs || (ns===bs && nk>bk)){ bk=nk; bs=ns; }
+      if(bk===null || (bs<size || (bs===size && bk<key))) break;   // local max → stragglers fold into it
+      key=bk; size=bs;
+    }
+    _regionCache.set(k0,key); return key;
+  }
+  // final region cells = every cell resolving to this key (flood by regionOf). union of merged pass-1
+  // regions is still orthogonally connected, so the flood captures the whole thing.
+  function regionCells(key){
+    if(key==='H'){ return baseCells('H'); }
+    if(key[0]!=='C') return [];
+    const p=key.slice(1).split(',').map(Number);
+    if(regionOf(p[0],p[1])!==key) return [];
+    const seen=new Set([p[0]+','+p[1]]), stack=[[p[0],p[1]]], cells=[];
+    while(stack.length && cells.length<600){
+      const cur=stack.pop(); cells.push(cur);
+      for(const d of CO){
+        const nx=cur[0]+d[0], ny=cur[1]+d[1], k=nx+','+ny;
+        if(seen.has(k) || inHome(nx,ny) || gemAt(nx,ny)) continue;
+        seen.add(k);
+        if(regionOf(nx,ny)===key) stack.push([nx,ny]);
+      }
+    }
+    return cells;
+  }
+  function regionFull(key){ for(const c of regionCells(key)) if(!isConq(c[0],c[1])) return false; return true; }
+  function regionCost(key){ let t=0; for(const c of regionCells(key)) t+=costOf(c[0],c[1]); return t; }
+  function regionCentroid(key){
+    const cs=regionCells(key); let sx=0,sy=0;
+    for(const c of cs){ sx+=c[0]; sy+=c[1]; }
+    return [Math.round(sx/cs.length), Math.round(sy/cs.length)];
+  }
+  const PAL=[140,0,30,55,175,210,255,290,325];             // Block-Blast-style vivid hues (index 0 = home green)
+  const DIR8=[[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+  function regionNeighbors(key){                           // region ids touching this one (incl. diagonally)
+    const cells=regionCells(key), s=new Set();
+    for(const cell of cells) for(const d of DIR8){
+      const id=regionOf(cell[0]+d[0], cell[1]+d[1]);
+      if(id!==key && id!=='GEM') s.add(id);
+    }
+    return s;
+  }
+  function regionPri(key){ if(key==='H') return 2; const p=(key[0]==='C'?key.slice(1):key).split(',').map(Number); return rnd(p[0],p[1],91); }
+  function colorIndex(key){                                // greedy graph-colouring → no two touching regions match
+    const hit=_colorCache.get(key); if(hit!==undefined) return hit;
+    const pri=regionPri(key), used=new Set();
+    for(const nid of regionNeighbors(key)){
+      const np=regionPri(nid);
+      if(np>pri || (np===pri && nid<key)) used.add(colorIndex(nid));
+    }
+    let i=0; while(used.has(i)) i++;
+    _colorCache.set(key, i); return i;
+  }
+  function regionHue(key){
+    return PAL[colorIndex(key) % PAL.length];   // home ('H') = highest priority → always index 0 (green), neighbours avoid it
+  }
+  // each region has its OWN generosity multiplier (0.7–1.5×) → some regions pay out, some are traps
+  function regionFactor(key){ if(key==='H') return 1; const p=(key[0]==='C'?key.slice(1):key).split(',').map(Number); return 0.7 + rnd(p[0],p[1],41)*0.8; }
+
+  // ---- coordinate helpers ----
+  function cellCenter(cx,cy){ return [ W/2 + (cx-camX)*CELL, H/2 + (cy-camY)*CELL ]; }
+  function screenToCell(px,py){ return [ Math.round((px-W/2)/CELL + camX), Math.round((py-H/2)/CELL + camY) ]; }
+
+  function ringColor(ring){ const hue = Math.max(0, 120 - ring*11); return hue; }
+
+  // flat, textureless bird's-eye view for far zoom-out: just your empire + gems as solid blocks.
+  // no bevels, gloss, numbers, or region outlines — and tapping is disabled (see tap()).
+  function drawOverview(){
+    ctx.fillStyle = '#0b0e14'; ctx.fillRect(0,0,W,H);
+    const s = CELL, sc = Math.ceil(s)+1;
+    // gems first (flat rainbow; muted until reachable, like the detailed view)
+    const gx0=Math.floor((camX-W/2/s)/GB)-1, gx1=Math.ceil((camX+W/2/s)/GB)+1;
+    const gy0=Math.floor((camY-H/2/s)/GB)-1, gy1=Math.ceil((camY+H/2/s)/GB)+1;
+    for(let by=gy0; by<=gy1; by++) for(let bx=gx0; bx<=gx1; bx++){
+      const g=gemForBlock(bx,by); if(!g) continue;
+      const a=cellCenter(g.ax,g.ay), b=cellCenter(g.ax+g.sz-1,g.ay+g.sz-1);
+      const gX=a[0]-s/2, gY=a[1]-s/2, gW=(b[0]-a[0])+s, gH=(b[1]-a[1])+s;
+      const grd=ctx.createLinearGradient(gX,gY,gX+gW,gY+gH);
+      grd.addColorStop(0,'#ff5d5d'); grd.addColorStop(.5,'#5fd08a'); grd.addColorStop(1,'#c07bff');
+      ctx.globalAlpha = gemTaken(g) ? 1 : 0.45;
+      ctx.fillStyle=grd; ctx.fillRect(gX,gY,gW,gH);
+    }
+    ctx.globalAlpha = 1;
+    // conquered empire (flat region colour; fog stays — unconquered cells aren't drawn)
+    const _rmemo=new Map();
+    const rOf=(x,y)=>{ const k=x+','+y; let v=_rmemo.get(k); if(v===undefined){ v=regionOf(x,y); _rmemo.set(k,v);} return v; };
+    for(const key of conquered){
+      const c=key.split(','), x=+c[0], y=+c[1];
+      const [scx,scy]=cellCenter(x,y);
+      if(scx<-s||scx>W+s||scy<-s||scy>H+s) continue;         // cull offscreen
+      const home=(x===0&&y===0);
+      ctx.fillStyle=`hsl(${home?PAL[0]:regionHue(rOf(x,y))},60%,52%)`;
+      ctx.fillRect(Math.round(scx-s/2), Math.round(scy-s/2), sc, sc);
+    }
+    // hint
+    ctx.fillStyle='rgba(233,236,243,.45)'; ctx.font='bold 12px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('OVERVIEW · zoom in to play', W/2, 26);
+  }
+
+  function draw(){
+    if(overview()){ drawOverview(); return; }
+    ctx.fillStyle = '#0b0e14'; ctx.fillRect(0,0,W,H);
+    const peek = document.getElementById('peek').checked;
+    const cx0 = Math.floor(camX - W/2/CELL) - 1, cx1 = Math.ceil(camX + W/2/CELL) + 1;
+    const cy0 = Math.floor(camY - H/2/CELL) - 1, cy1 = Math.ceil(camY + H/2/CELL) + 1;
+    const _rmemo = new Map();
+    const rOf = (x,y)=>{ const k=x+','+y; let v=_rmemo.get(k); if(v===undefined){ v=regionOf(x,y); _rmemo.set(k,v);} return v; };
+    for(let y=cy0; y<=cy1; y++){
+      for(let x=cx0; x<=cx1; x++){
+        const [scx,scy] = cellCenter(x,y);
+        const px = scx - CELL/2, py = scy - CELL/2, s = CELL;
+        const key = x+','+y;
+        if(gemAt(x,y)) continue;                 // gems drawn as one big tile in a later pass
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        if(isConq(x,y)){
+          const hue = regionHue(rOf(x,y)), home = (x===0&&y===0);   // colour revealed only once conquered
+          block(px,py,s,hue,58,home?52:44);
+          if(home){ ctx.fillStyle='#fff'; ctx.font='22px sans-serif'; ctx.fillText('🏠', scx, scy+1); }
+        } else if(attackable(x,y)){
+          const done = taps.get(key)||0;
+          block(px,py,s,220,6,30);              // neutral "mystery" tile — region hidden until conquered
+          if(done>0){ ctx.font='bold 18px sans-serif'; ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fillText(String(done), scx, scy); }
+          if(peek){
+            ctx.font='bold 10px sans-serif';
+            ctx.fillStyle='#ffe08a'; ctx.fillText(costOf(x,y)+'t', scx, py+11);
+            ctx.fillStyle='#9be8b6'; ctx.fillText('+'+rewardOf(x,y), scx, py+s-10);
+          }
+        } else {
+          slot(px,py,s,220);                     // neutral locked slot (no region colour)
+        }
+      }
+    }
+    // organic region boundaries — faint outline where two NON-gem neighbours differ in region
+    for(let y=cy0; y<=cy1; y++){
+      for(let x=cx0; x<=cx1; x++){
+        if(gemAt(x,y) || !isConq(x,y)) continue;        // outline only revealed (conquered) regions
+        const here = rOf(x,y);
+        const c = cellCenter(x,y);
+        const L=c[0]-CELL/2, T=c[1]-CELL/2, R=c[0]+CELL/2, B=c[1]+CELL/2;
+        const rr2 = rOf(x+1,y);
+        if(rr2!==here && isConq(x+1,y) && !gemAt(x+1,y)){
+          const gold = clearedSectors.has(here)||clearedSectors.has(rr2);
+          ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(R,T); ctx.lineTo(R,B); ctx.stroke();
+        }
+        const rb = rOf(x,y+1);
+        if(rb!==here && isConq(x,y+1) && !gemAt(x,y+1)){
+          const gold = clearedSectors.has(here)||clearedSectors.has(rb);
+          ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(L,B); ctx.lineTo(R,B); ctx.stroke();
+        }
+      }
+    }
+    // gem pass — draw each visible gem as ONE big tile
+    const drawnG=new Set();
+    for(let gyv=cy0; gyv<=cy1; gyv++){
+      for(let gxv=cx0; gxv<=cx1; gxv++){
+        const gem=gemAt(gxv,gyv); if(!gem) continue;
+        const gk=gemKey(gem); if(drawnG.has(gk)) continue; drawnG.add(gk);
+        const a=cellCenter(gem.ax,gem.ay), b=cellCenter(gem.ax+gem.sz-1,gem.ay+gem.sz-1);
+        const gX=a[0]-CELL/2, gY=a[1]-CELL/2, gW=(b[0]-a[0])+CELL, gH=(b[1]-a[1])+CELL;
+        const taken=gemTaken(gem), reach=gemAttackable(gem);
+        rainbowBlockRect(gX,gY,gW,gH, !taken && !reach);      // full colour when taken; muted only when still out of reach
+        if(!taken){                                           // live diamond → show 💎 + info
+          const mcx=gX+gW/2, mcy=gY+gH/2;                     // true geometric centre of the tile
+          ctx.textAlign='center'; ctx.textBaseline='middle';
+          ctx.fillStyle='#fff'; ctx.font=`${18+gem.sz*4}px sans-serif`; ctx.fillText('💎', mcx, mcy-4);
+          const gd=gemTaps.get(gk)||0;
+          if(gd>0){ ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif'; ctx.fillText(String(gd), mcx, mcy+16); }
+          if(peek){ ctx.fillStyle='#1a1200'; ctx.font='bold 11px sans-serif';
+            ctx.fillText(gemCost(gem)+'t', mcx, gY+13);
+            ctx.fillText('+'+gemReward(gem), mcx, gY+gH-11); }
+        }
+      }
+    }
+    // region-clear flash — yellow outline blinking twice
+    const nowF = performance.now();
+    clearFx = clearFx.filter(fx => nowF - fx.t0 < 800);
+    for(const fx of clearFx){
+      const a = Math.abs(Math.sin(((nowF-fx.t0)/800)*Math.PI*2));   // two pulses over 0.8s
+      const set = fx._set || (fx._set = new Set(fx.cells.map(c=>c[0]+','+c[1])));
+      ctx.strokeStyle = `rgba(255,211,92,${a})`; ctx.lineWidth = 3; ctx.beginPath();
+      for(const c of fx.cells){
+        const cc=cellCenter(c[0],c[1]), L=cc[0]-CELL/2, T=cc[1]-CELL/2, R=cc[0]+CELL/2, Bt=cc[1]+CELL/2;
+        if(!set.has(c[0]+','+(c[1]-1))){ ctx.moveTo(L,T); ctx.lineTo(R,T); }
+        if(!set.has(c[0]+','+(c[1]+1))){ ctx.moveTo(L,Bt); ctx.lineTo(R,Bt); }
+        if(!set.has((c[0]-1)+','+c[1])){ ctx.moveTo(L,T); ctx.lineTo(L,Bt); }
+        if(!set.has((c[0]+1)+','+c[1])){ ctx.moveTo(R,T); ctx.lineTo(R,Bt); }
+      }
+      ctx.stroke();
+    }
+    // floaters
+    const now = performance.now();
+    floaters = floaters.filter(f => now - f.t < (f.dur||1100));
+    for(const f of floaters){
+      const dur=f.dur||1100, k=(now-f.t)/dur;
+      const [scx,scy] = cellCenter(f.x,f.y);
+      ctx.globalAlpha = Math.max(0,1-k);
+      ctx.fillStyle = f.color; ctx.font='bold '+(f.size||20)+'px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      otext(f.txt, scx, scy - 26 - k*40);
+      ctx.globalAlpha = 1;
+    }
+  }
+  function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  // outlined text — thin black stroke behind the fill so numbers read on any colour
+  function otext(t,x,y){ ctx.lineJoin='round'; ctx.lineWidth=1.5; ctx.strokeStyle='rgba(0,0,0,.8)'; ctx.strokeText(t,x,y); ctx.fillText(t,x,y); }
+  // Block-Blast-style glossy beveled tile
+  function block(x,y,s,h,sat,lig){
+    const r=0, hi=Math.min(94,lig+16), lo=Math.max(4,lig-9);
+    const g=ctx.createLinearGradient(x,y,x,y+s);
+    g.addColorStop(0,`hsl(${h},${sat}%,${hi}%)`); g.addColorStop(1,`hsl(${h},${sat}%,${lo}%)`);
+    ctx.fillStyle=g; rr(x,y,s,s,r); ctx.fill();
+    ctx.lineWidth=2.5; ctx.strokeStyle='rgba(255,255,255,.42)';          // top-left highlight bevel
+    ctx.beginPath(); ctx.moveTo(x+4,y+s-8); ctx.lineTo(x+4,y+8); ctx.arcTo(x+4,y+4,x+8,y+4,4); ctx.lineTo(x+s-8,y+4); ctx.stroke();
+    ctx.strokeStyle=`hsla(${h},${sat}%,${Math.max(2,lig-26)}%,.6)`;       // bottom-right shadow bevel
+    ctx.beginPath(); ctx.moveTo(x+s-4,y+8); ctx.lineTo(x+s-4,y+s-8); ctx.arcTo(x+s-4,y+s-4,x+s-8,y+s-4,4); ctx.lineTo(x+8,y+s-4); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,.28)'; rr(x+s*0.17,y+s*0.14,s*0.66,s*0.2,5); ctx.fill();  // gloss
+    ctx.lineWidth=1; ctx.strokeStyle='rgba(0,0,0,.3)'; rr(x,y,s,s,r); ctx.stroke();
+  }
+  function rainbowBlock(x,y,s,dim){
+    const r=0, a=dim?0.5:1;
+    const g=ctx.createLinearGradient(x,y,x+s,y+s);
+    g.addColorStop(0,`rgba(255,93,93,${a})`); g.addColorStop(.25,`rgba(255,211,92,${a})`); g.addColorStop(.5,`rgba(95,208,138,${a})`); g.addColorStop(.75,`rgba(92,199,255,${a})`); g.addColorStop(1,`rgba(192,123,255,${a})`);
+    ctx.fillStyle=g; rr(x,y,s,s,r); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.3)'; rr(x+s*0.17,y+s*0.14,s*0.66,s*0.2,5); ctx.fill();
+    ctx.lineWidth=dim?1.5:2.5; ctx.strokeStyle=dim?'rgba(255,255,255,.5)':'#fff'; rr(x,y,s,s,r); ctx.stroke();
+  }
+  function rainbowBlockRect(x,y,w,h,dim){
+    const a=dim?0.5:1;
+    const g=ctx.createLinearGradient(x,y,x+w,y+h);
+    g.addColorStop(0,`rgba(255,93,93,${a})`); g.addColorStop(.25,`rgba(255,211,92,${a})`); g.addColorStop(.5,`rgba(95,208,138,${a})`); g.addColorStop(.75,`rgba(92,199,255,${a})`); g.addColorStop(1,`rgba(192,123,255,${a})`);
+    ctx.fillStyle=g; rr(x,y,w,h,0); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.26)'; rr(x+6,y+5,w-12,Math.min(h*0.28,16),0); ctx.fill();
+    ctx.lineWidth=dim?2:3.5; ctx.strokeStyle=dim?'rgba(255,255,255,.55)':'#fff'; rr(x,y,w,h,0); ctx.stroke();
+  }
+  function slot(x,y,s,h){
+    ctx.fillStyle=`hsl(${h},20%,10%)`; rr(x,y,s,s,0); ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,.28)'; rr(x+2,y+2,s-4,s-4,6); ctx.fill();  // recessed inset
+    ctx.strokeStyle='rgba(255,255,255,.05)'; ctx.lineWidth=1; rr(x,y,s,s,0); ctx.stroke();
+  }
+
+  function sync(){
+    document.getElementById('ammo').textContent = ammo;
+    document.getElementById('empire').textContent = conquered.size;
+    document.getElementById('regions').textContent = clearedSectors.size;
+    document.getElementById('spent').textContent = spent;
+    document.getElementById('earned').textContent = earned;
+    const net = earned - spent;
+    const ne = document.getElementById('net');
+    ne.textContent = (net>=0?'+':'') + net; ne.style.color = net>=0?'#5fd08a':'#ff6b6b';
+    const rl = document.getElementById('realized');
+    rl.textContent = spent>0 ? Math.round(earned/spent*100)+'%' : '—';
+    saveThrottled();                     // autosave during play (crash safety, ≤ once / 2s)
+  }
+
+  function tap(x,y){
+    if(gameOver || overview()) return;     // overview is a look-only mode — no shooting
+    const _gem = gemAt(x,y);
+    if(_gem){
+      if(gemTaken(_gem) || !gemAttackable(_gem)) return;
+      if(ammo<=0){ endGame(); return; }
+      ammo--; spent++;
+      const gk=gemKey(_gem), gd=(gemTaps.get(gk)||0)+1; gemTaps.set(gk,gd);
+      if(gd >= gemCost(_gem)){
+        takenGems.add(gk); gemTaps.delete(gk);
+        for(const cc of gemCells(_gem)) conquered.add(cc[0]+','+cc[1]);
+        const rw=gemReward(_gem); ammo+=rw; earned+=rw;
+        const gcx=_gem.ax+(_gem.sz-1)/2, gcy=_gem.ay+(_gem.sz-1)/2;   // geometric centre (fractional)
+        floaters.push({x:gcx, y:gcy, txt:'💎 +'+rw, color:'#ffd35c', t:performance.now(), dur:2600, size:26});
+      }
+      if(ammo<=0){ sync(); endGame(); return; }
+      sync(); return;
+    }
+    if(!attackable(x,y)) return;
+    if(ammo<=0){ endGame(); return; }
+    ammo--; spent++;
+    const key = x+','+y;
+    const done = (taps.get(key)||0)+1;
+    taps.set(key, done);
+    if(done >= costOf(x,y)){
+      const rw = rewardOf(x,y);
+      conquered.add(key); taps.delete(key);
+      ammo += rw; earned += rw;
+      floaters.push({x,y,txt:'+'+rw, color:'#5fd08a', t:performance.now()});
+      const rk = regionOf(x,y);
+      if(!clearedSectors.has(rk) && regionFull(rk)){
+        clearedSectors.add(rk);
+        const bonus = Math.round(regionCost(rk) * (rtp/100) * regionFactor(rk) * HOLDBACK);
+        ammo += bonus; earned += bonus;
+        const ctr = regionCentroid(rk);
+        floaters.push({x:ctr[0], y:ctr[1], txt:'★ REGION CLEARED  +'+bonus, color:'#ffd35c', t:performance.now(), dur:2600, size:24});
+        clearFx.push({t0:performance.now(), cells:regionCells(rk)});
+      }
+    }
+    if(ammo<=0){ sync(); endGame(); return; }
+    sync();
+  }
+
+  function endGame(){
+    gameOver = true;
+    document.getElementById('overstat').textContent =
+      `${conquered.size} tiles conquered · ${clearedSectors.size} regions cleared`;
+    document.getElementById('over').style.display='flex';
+    save();
+  }
+
+  // ---- input: tap / hold-to-fire / drag-to-pan ----
+  let downX,downY,downCell,moved,lastX,lastY,fireTimer,holdTimer,autofiring;
+  const THRESH = 7;
+  const pointers = new Map();
+  let pinchDist = 0, pinching = false, pinchedGesture = false, pinchMX, pinchMY;
+  function cancelHoldFire(){ clearTimeout(holdTimer); if(autofiring){ clearInterval(fireTimer); autofiring=false; } }
+  cv.addEventListener('pointerdown', e=>{
+    if(gameOver) return;
+    cv.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pointers.size>=2){                                    // two fingers → pinch-zoom
+      pinching=true; pinchedGesture=true; moved=true; cancelHoldFire();
+      const p=[...pointers.values()];
+      pinchDist=Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+      pinchMX=(p[0].x+p[1].x)/2; pinchMY=(p[0].y+p[1].y)/2;   // anchor point for focal zoom / 2-finger pan
+      return;
+    }
+    downX=lastX=e.clientX; downY=lastY=e.clientY; moved=false; autofiring=false;
+    downCell = screenToCell(e.clientX,e.clientY);
+    holdTimer = setTimeout(()=>{
+      if(moved || pinching) return;
+      autofiring = true; tap(downCell[0],downCell[1]);
+      fireTimer = setInterval(()=>{ if(!moved && !pinching) tap(downCell[0],downCell[1]); }, 95);
+    }, 170);
+  });
+  cv.addEventListener('pointermove', e=>{
+    if(pointers.has(e.pointerId)) pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pinching && pointers.size>=2){
+      const p=[...pointers.values()], d=Math.hypot(p[0].x-p[1].x, p[0].y-p[1].y);
+      const mx=(p[0].x+p[1].x)/2, my=(p[0].y+p[1].y)/2;                 // current finger midpoint
+      if(pinchMX!==undefined){ camX-=(mx-pinchMX)/CELL; camY-=(my-pinchMY)/CELL; }   // 2-finger drag = pan
+      if(pinchDist>0){                                                 // zoom ABOUT the midpoint (no jump)
+        const wx=(mx-W/2)/CELL+camX, wy=(my-H/2)/CELL+camY;            // world point under the fingers
+        CELL=Math.max(MINZOOM, Math.min(MAXZOOM, CELL*(d/pinchDist)));
+        camX=wx-(mx-W/2)/CELL; camY=wy-(my-H/2)/CELL;                  // keep that point under the fingers
+      }
+      pinchDist=d; pinchMX=mx; pinchMY=my; return;
+    }
+    if(downX===undefined) return;
+    const dx=e.clientX-lastX, dy=e.clientY-lastY;
+    if(!moved && Math.hypot(e.clientX-downX, e.clientY-downY)>THRESH){ moved=true; cancelHoldFire(); }
+    if(moved){ camX -= dx/CELL; camY -= dy/CELL; }
+    lastX=e.clientX; lastY=e.clientY;
+  });
+  function up(e){
+    pointers.delete(e.pointerId);
+    if(pointers.size<2) pinching=false;
+    const wasAuto=autofiring; cancelHoldFire();
+    if(pointers.size===1){                        // pinch → 1 finger: rebase pan to the remaining finger
+      const rp=[...pointers.values()][0];         // (its position, not the stale pre-pinch one) → no snap
+      downX=lastX=rp.x; downY=lastY=rp.y; moved=true;
+    }
+    if(pointers.size===0){
+      if(!moved && !wasAuto && !pinchedGesture && downCell) tap(downCell[0],downCell[1]);
+      downX=undefined; downCell=null; pinchedGesture=false;
+    }
+  }
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e=>{ e.preventDefault(); CELL = Math.max(MINZOOM, Math.min(MAXZOOM, CELL*(e.deltaY<0?1.12:0.89))); }, {passive:false});   // desktop zoom
+
+  // ---- controls ----
+  document.getElementById('rtp').addEventListener('input', e=>{
+    rtp = +e.target.value; document.getElementById('rtpv').textContent = rtp;
+  });
+  document.getElementById('peek').addEventListener('change', ()=>{});
+  document.getElementById('center').addEventListener('click', ()=>{ camX=0; camY=0; });
+  document.getElementById('restart').addEventListener('click', init);
+  document.getElementById('newmap').addEventListener('click', init);
+  document.getElementById('continue').addEventListener('click', ()=>{   // later: gate behind ad / pay
+    ammo += 100; gameOver = false;
+    document.getElementById('over').style.display='none'; sync(); save();
+  });
+  document.getElementById('play').addEventListener('click', ()=>{ document.getElementById('intro').style.display='none'; });
+
+  // ---- save on leave: covers tab close, refresh, navigation, and tab/app switch ----
+  window.addEventListener('pagehide', save);
+  document.addEventListener('visibilitychange', ()=>{ if(document.hidden) save(); });
+
+  // ---- loop ----
+  if(!loadSave()) init();                // resume the stored game, or start a fresh one
+  (function frame(){ draw(); requestAnimationFrame(frame); })();
+})();
+</script>
+</body>
+</html>
