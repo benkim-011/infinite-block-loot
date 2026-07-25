@@ -6,8 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Garden">
-<title>Infinite Garden</title>
+<meta name="apple-mobile-web-app-title" content="Block Loot">
+<title>Infinite Block Loot</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box;
       -webkit-user-select:none; user-select:none;            /* no text-selection highlight on hold */
@@ -70,15 +70,15 @@
 <canvas id="game"></canvas>
 
 <div id="intro"><div class="box">
-  <h1>🌷 Infinite Garden</h1>
-  <p><b>Tap</b> soil to grow your garden · <b>Hold</b> to auto-plant · <b>Drag</b> to pan<br>Bloom whole patches and find rare 🌈 rainbow blooms for big pollen.<br>Watch your pollen — don't run dry!</p>
+  <h1>💎 Infinite Block Loot</h1>
+  <p><b>Tap</b> tiles to conquer territory · <b>Hold</b> to auto-fire · <b>Drag</b> to pan<br>Clear whole regions and crack rainbow 💎 diamonds for big loot.<br>Watch your ammo — don't run dry!</p>
   <button id="play">Play</button>
   <p class="note">Your progress saves automatically. On <b>iPhone Safari</b>, Apple may clear it when you fully close the app — keep the tab open, or play in Chrome, to be safe.</p>
 </div></div>
 
 <div id="hud" class="panel">
-  <div class="ammo"><span id="ammo">100</span> <small>POLLEN</small></div>
-  <div class="empire">Garden: <b id="empire">1</b> <small style="color:#8a94a5">flowers</small> · Patches: <b id="regions" style="color:#ffd35c">0</b></div>
+  <div class="ammo"><span id="ammo">100</span> <small>AMMO</small></div>
+  <div class="empire">Empire: <b id="empire">1</b> <small style="color:#8a94a5">cells</small> · Regions: <b id="regions" style="color:#ffd35c">0</b></div>
   <div class="row"><span>Spent</span><b id="spent">0</b></div>
   <div class="row"><span>Earned</span><b id="earned">0</b></div>
   <div class="row"><span>Net</span><b id="net">0</b></div>
@@ -87,21 +87,21 @@
 <div id="ctrl" class="panel">
   <label>Set RTP: <span class="rtpval"><span id="rtpv">100</span>%</span></label>
   <input id="rtp" type="range" min="50" max="150" value="100" step="1">
-  <div class="hint">Expected pollen returned per pollen spent. &lt;100% = you wither (faster). 100% = break-even but variance still wilts you eventually (gambler's ruin). &gt;100% = your garden thrives.</div>
+  <div class="hint">Expected ammo returned per ammo spent. &lt;100% = you bleed out (faster). 100% = break-even but variance still busts you eventually (gambler's ruin). &gt;100% = you grow.</div>
   <div class="realized">Realized RTP: <b id="realized" style="color:#5fd08a">—</b></div>
-  <label class="peek"><input type="checkbox" id="peek"> Peek (show hidden taps / pollen)</label>
+  <label class="peek"><input type="checkbox" id="peek"> Peek (show hidden taps / reward)</label>
   <div class="btns"><button id="center">🏠 Center</button><button id="restart">Restart</button></div>
 </div>
 
 <div id="help" class="panel">
-  <b>Tap</b> adjacent soil to plant it (1 pollen/tap) &nbsp;·&nbsp; <b>Hold</b> to auto-plant &nbsp;·&nbsp; <b>Drag</b> to pan &nbsp;·&nbsp; hidden taps to bloom, hidden pollen reward &nbsp;·&nbsp; don't hit 0
+  <b>Tap</b> an adjacent square to shoot it (1 ammo/tap) &nbsp;·&nbsp; <b>Hold</b> to auto-fire &nbsp;·&nbsp; <b>Drag</b> to pan &nbsp;·&nbsp; hidden taps to conquer, hidden ammo reward &nbsp;·&nbsp; don't hit 0
 </div>
 
 <div id="over"><div class="box">
-  <h1>OUT OF POLLEN</h1>
+  <h1>OUT OF AMMO</h1>
   <p id="overstat"></p>
   <div style="display:flex; gap:12px; justify-content:center; margin-top:4px;">
-    <button id="newmap" style="background:#2a3342; color:#e7ecf3;">New Garden</button>
+    <button id="newmap" style="background:#2a3342; color:#e7ecf3;">New Map</button>
     <button id="continue">Continue +100</button>
   </div>
 </div></div>
@@ -111,7 +111,7 @@
   const cv = document.getElementById('game');
   const ctx = cv.getContext('2d');
   const START_AMMO = 100, MAC = 4, HOLDBACK = 0.5;
-  const SAVE_KEY = 'igarden_save_v1';   // localStorage slot — bump the suffix to invalidate old saves
+  const SAVE_KEY = 'ibl_save_v1';   // localStorage slot — bump the suffix to invalidate old saves
   const MINZOOM = 2, MAXZOOM = 80;  // px per cell — MINZOOM lets you pull way out to see the whole empire
   const OVER_CELL = 12;             // below this the board flips to flat, unclickable "overview" mode
   const overview = () => CELL < OVER_CELL;
@@ -174,7 +174,7 @@
       if(rs) rs.value=rtp; if(rv) rv.textContent=rtp;                 // reflect restored RTP in the slider
       const ov=document.getElementById('over'); ov.style.display = gameOver ? 'flex' : 'none';
       if(gameOver) document.getElementById('overstat').textContent =
-        `${conquered.size} flowers grown · ${clearedSectors.size} patches bloomed`;
+        `${conquered.size} tiles conquered · ${clearedSectors.size} regions cleared`;
       sync();
       return true;
     }catch(e){ return false; }           // corrupt save → fall back to a fresh game
@@ -426,7 +426,7 @@
   // flat, textureless bird's-eye view for far zoom-out: just your empire + gems as solid blocks.
   // no bevels, gloss, numbers, or region outlines — and tapping is disabled (see tap()).
   function drawOverview(){
-    ctx.fillStyle = 'hsl(28,40%,20%)'; ctx.fillRect(0,0,W,H);   // whole field reads as brown soil from afar
+    ctx.fillStyle = '#0b0e14'; ctx.fillRect(0,0,W,H);
     const s = CELL, sc = Math.ceil(s)+1;
     // gems first (flat rainbow; muted until reachable, like the detailed view)
     const gx0=Math.floor((camX-W/2/s)/GB)-1, gx1=Math.ceil((camX+W/2/s)/GB)+1;
@@ -474,20 +474,20 @@
         if(gemAt(x,y)) continue;                 // gems drawn as one big tile in a later pass
         ctx.textAlign='center'; ctx.textBaseline='middle';
         if(isConq(x,y)){
-          const hue = regionHue(rOf(x,y)), home = (x===0&&y===0);   // flower colour revealed once grown
-          soil(px,py,s,false);                   // rich planted bed
-          flower(x,y,scx,scy,s,hue,home);        // a bloom in this patch's colour (home = sunflower)
+          const hue = regionHue(rOf(x,y)), home = (x===0&&y===0);   // colour revealed only once conquered
+          block(px,py,s,hue,58,home?52:44);
+          if(home){ ctx.fillStyle='#fff'; ctx.font='22px sans-serif'; ctx.fillText('🏠', scx, scy+1); }
         } else if(attackable(x,y)){
           const done = taps.get(key)||0;
-          soil(px,py,s,true);                    // tilled soil, ready to plant
-          if(done>0){ ctx.font='bold 18px sans-serif'; ctx.fillStyle='#fff'; otext(String(done), scx, scy); }
+          block(px,py,s,220,6,30);              // neutral "mystery" tile — region hidden until conquered
+          if(done>0){ ctx.font='bold 18px sans-serif'; ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fillText(String(done), scx, scy); }
           if(peek){
             ctx.font='bold 10px sans-serif';
             ctx.fillStyle='#ffe08a'; ctx.fillText(costOf(x,y)+'t', scx, py+11);
             ctx.fillStyle='#9be8b6'; ctx.fillText('+'+rewardOf(x,y), scx, py+s-10);
           }
         } else {
-          slot(px,py,s);                         // undisturbed earth
+          slot(px,py,s,220);                     // neutral locked slot (no region colour)
         }
       }
     }
@@ -521,19 +521,13 @@
         const a=cellCenter(gem.ax,gem.ay), b=cellCenter(gem.ax+gem.sz-1,gem.ay+gem.sz-1);
         const gX=a[0]-CELL/2, gY=a[1]-CELL/2, gW=(b[0]-a[0])+CELL, gH=(b[1]-a[1])+CELL;
         const taken=gemTaken(gem), reach=gemAttackable(gem);
-        const mcx=gX+gW/2, mcy=gY+gH/2, gs=Math.min(gW,gH);
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        if(taken){                                            // cleared → brown soil bed + rainbow flower
-          for(let j=0;j<gem.sz;j++) for(let i=0;i<gem.sz;i++){
-            const cc=cellCenter(gem.ax+i, gem.ay+j);          // same soil as every other planted cell
-            soil(cc[0]-CELL/2, cc[1]-CELL/2, CELL, false);
-          }
-          bigBloom(mcx,mcy,gs);
-        } else {                                              // still a locked gem → rainbow bed + 💎
-          rainbowBlockRect(gX,gY,gW,gH, !reach);              // muted only when out of reach
-          ctx.fillStyle='#fff'; ctx.font=`${16+gem.sz*3}px sans-serif`; ctx.fillText('💎', mcx, mcy-2);
+        rainbowBlockRect(gX,gY,gW,gH, !taken && !reach);      // full colour when taken; muted only when still out of reach
+        if(!taken){                                           // live diamond → show 💎 + info
+          const mcx=gX+gW/2, mcy=gY+gH/2;                     // true geometric centre of the tile
+          ctx.textAlign='center'; ctx.textBaseline='middle';
+          ctx.fillStyle='#fff'; ctx.font=`${18+gem.sz*4}px sans-serif`; ctx.fillText('💎', mcx, mcy-4);
           const gd=gemTaps.get(gk)||0;
-          if(gd>0){ ctx.font='bold 15px sans-serif'; ctx.fillStyle='#fff'; otext(String(gd), mcx, mcy+gs*0.30); }
+          if(gd>0){ ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif'; ctx.fillText(String(gd), mcx, mcy+16); }
           if(peek){ ctx.fillStyle='#1a1200'; ctx.font='bold 11px sans-serif';
             ctx.fillText(gemCost(gem)+'t', mcx, gY+13);
             ctx.fillText('+'+gemReward(gem), mcx, gY+gH-11); }
@@ -572,6 +566,27 @@
   function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
   // outlined text — thin black stroke behind the fill so numbers read on any colour
   function otext(t,x,y){ ctx.lineJoin='round'; ctx.lineWidth=1.5; ctx.strokeStyle='rgba(0,0,0,.8)'; ctx.strokeText(t,x,y); ctx.fillText(t,x,y); }
+  // Block-Blast-style glossy beveled tile
+  function block(x,y,s,h,sat,lig){
+    const r=0, hi=Math.min(94,lig+16), lo=Math.max(4,lig-9);
+    const g=ctx.createLinearGradient(x,y,x,y+s);
+    g.addColorStop(0,`hsl(${h},${sat}%,${hi}%)`); g.addColorStop(1,`hsl(${h},${sat}%,${lo}%)`);
+    ctx.fillStyle=g; rr(x,y,s,s,r); ctx.fill();
+    ctx.lineWidth=2.5; ctx.strokeStyle='rgba(255,255,255,.42)';          // top-left highlight bevel
+    ctx.beginPath(); ctx.moveTo(x+4,y+s-8); ctx.lineTo(x+4,y+8); ctx.arcTo(x+4,y+4,x+8,y+4,4); ctx.lineTo(x+s-8,y+4); ctx.stroke();
+    ctx.strokeStyle=`hsla(${h},${sat}%,${Math.max(2,lig-26)}%,.6)`;       // bottom-right shadow bevel
+    ctx.beginPath(); ctx.moveTo(x+s-4,y+8); ctx.lineTo(x+s-4,y+s-8); ctx.arcTo(x+s-4,y+s-4,x+s-8,y+s-4,4); ctx.lineTo(x+8,y+s-4); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,.28)'; rr(x+s*0.17,y+s*0.14,s*0.66,s*0.2,5); ctx.fill();  // gloss
+    ctx.lineWidth=1; ctx.strokeStyle='rgba(0,0,0,.3)'; rr(x,y,s,s,r); ctx.stroke();
+  }
+  function rainbowBlock(x,y,s,dim){
+    const r=0, a=dim?0.5:1;
+    const g=ctx.createLinearGradient(x,y,x+s,y+s);
+    g.addColorStop(0,`rgba(255,93,93,${a})`); g.addColorStop(.25,`rgba(255,211,92,${a})`); g.addColorStop(.5,`rgba(95,208,138,${a})`); g.addColorStop(.75,`rgba(92,199,255,${a})`); g.addColorStop(1,`rgba(192,123,255,${a})`);
+    ctx.fillStyle=g; rr(x,y,s,s,r); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.3)'; rr(x+s*0.17,y+s*0.14,s*0.66,s*0.2,5); ctx.fill();
+    ctx.lineWidth=dim?1.5:2.5; ctx.strokeStyle=dim?'rgba(255,255,255,.5)':'#fff'; rr(x,y,s,s,r); ctx.stroke();
+  }
   function rainbowBlockRect(x,y,w,h,dim){
     const a=dim?0.5:1;
     const g=ctx.createLinearGradient(x,y,x+w,y+h);
@@ -580,60 +595,10 @@
     ctx.fillStyle='rgba(255,255,255,.26)'; rr(x+6,y+5,w-12,Math.min(h*0.28,16),0); ctx.fill();
     ctx.lineWidth=dim?2:3.5; ctx.strokeStyle=dim?'rgba(255,255,255,.55)':'#fff'; rr(x,y,w,h,0); ctx.stroke();
   }
-  function slot(x,y,s){                                   // undisturbed earth (locked ground)
-    ctx.fillStyle='hsl(28,34%,13%)'; rr(x,y,s,s,0); ctx.fill();
-    ctx.fillStyle='rgba(0,0,0,.30)'; rr(x+2,y+2,s-4,s-4,6); ctx.fill();  // recessed inset
-    ctx.strokeStyle='rgba(120,80,40,.10)'; ctx.lineWidth=1; rr(x,y,s,s,0); ctx.stroke();
-  }
-  // tilled soil clod. tilled=true → lighter, "ready to plant"; false → richer planted bed under a flower
-  function soil(x,y,s,tilled){
-    const g=ctx.createLinearGradient(x,y,x,y+s);
-    if(tilled){ g.addColorStop(0,'hsl(30,40%,42%)'); g.addColorStop(1,'hsl(27,46%,30%)'); }
-    else      { g.addColorStop(0,'hsl(27,46%,27%)'); g.addColorStop(1,'hsl(24,52%,17%)'); }
-    ctx.fillStyle=g; rr(x,y,s,s,0); ctx.fill();
-    ctx.fillStyle='rgba(255,236,200,.05)'; rr(x+2,y+2,s-4,Math.max(2,s*0.16),4); ctx.fill();   // top light
-    ctx.fillStyle='rgba(0,0,0,.16)';                                                            // soil specks
-    ctx.beginPath(); ctx.arc(x+s*0.30,y+s*0.62,Math.max(0.6,s*0.05),0,6.3); ctx.fill();
-    ctx.beginPath(); ctx.arc(x+s*0.68,y+s*0.40,Math.max(0.6,s*0.04),0,6.3); ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,.28)'; ctx.lineWidth=1; rr(x,y,s,s,0); ctx.stroke();
-  }
-  // one ring of n radial petals (ellipses pointing outward). arm = petal offset from centre.
-  function petalRing(cx,cy,n,rot,arm,plen,pwid,fill,edge){
-    for(let i=0;i<n;i++){
-      ctx.save(); ctx.translate(cx,cy); ctx.rotate(rot + i/n*Math.PI*2);
-      ctx.beginPath(); ctx.ellipse(arm,0,plen,pwid,0,0,Math.PI*2);
-      ctx.fillStyle=fill; ctx.fill();
-      if(edge){ ctx.lineWidth=Math.max(1,plen*0.08); ctx.strokeStyle=edge; ctx.stroke(); }
-      ctx.restore();
-    }
-  }
-  // a bloom that FILLS the cell. one consistent shape everywhere — only the COLOUR varies (per patch),
-  // so regions stay easy to read. home = a big golden sunflower.
-  function flower(x,y,cx,cy,s,hue,home){
-    if(home){                                                     // home base — a house, the clearest symbol
-      ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.font=`${Math.round(s*0.62)}px sans-serif`; ctx.fillText('🏠', cx, cy+s*0.02);
-      return;
-    }
-    const rot=rnd(x,y,89)*Math.PI;                                // slight orientation jitter (shape is uniform)
-    petalRing(cx,cy,8,rot, s*0.27, s*0.20, s*0.155, `hsl(${hue},72%,63%)`, `hsl(${hue},58%,44%)`);
-    ctx.beginPath(); ctx.arc(cx,cy,s*0.17,0,6.3);
-    ctx.fillStyle='hsl(44,92%,57%)'; ctx.fill();
-    ctx.lineWidth=1; ctx.strokeStyle='rgba(90,60,10,.4)'; ctx.stroke();
-  }
-  // the rainbow bloom that appears once a special square is cleared — same rounded 8-petal shape as a
-  // normal flower, but each petal a different spectrum hue.
-  function bigBloom(cx,cy,size){
-    const n=8, arm=size*0.27, plen=size*0.20, pwid=size*0.155;
-    for(let i=0;i<n;i++){
-      ctx.save(); ctx.translate(cx,cy); ctx.rotate(i/n*Math.PI*2);
-      ctx.beginPath(); ctx.ellipse(arm,0,plen,pwid,0,0,Math.PI*2);
-      ctx.fillStyle=`hsl(${Math.round(i/n*360)},78%,63%)`; ctx.fill();
-      ctx.lineWidth=Math.max(1,plen*0.08); ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.stroke();
-      ctx.restore();
-    }
-    ctx.beginPath(); ctx.arc(cx,cy,size*0.17,0,6.3); ctx.fillStyle='hsl(46,95%,60%)'; ctx.fill();
-    ctx.lineWidth=1.5; ctx.strokeStyle='rgba(120,80,20,.6)'; ctx.stroke();
+  function slot(x,y,s,h){
+    ctx.fillStyle=`hsl(${h},20%,10%)`; rr(x,y,s,s,0); ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,.28)'; rr(x+2,y+2,s-4,s-4,6); ctx.fill();  // recessed inset
+    ctx.strokeStyle='rgba(255,255,255,.05)'; ctx.lineWidth=1; rr(x,y,s,s,0); ctx.stroke();
   }
 
   function sync(){
@@ -685,7 +650,7 @@
         const bonus = Math.round(regionCost(rk) * (rtp/100) * regionFactor(rk) * HOLDBACK);
         ammo += bonus; earned += bonus;
         const ctr = regionCentroid(rk);
-        floaters.push({x:ctr[0], y:ctr[1], txt:'🌼 PATCH BLOOMED  +'+bonus, color:'#ffd35c', t:performance.now(), dur:2600, size:24});
+        floaters.push({x:ctr[0], y:ctr[1], txt:'★ REGION CLEARED  +'+bonus, color:'#ffd35c', t:performance.now(), dur:2600, size:24});
         clearFx.push({t0:performance.now(), cells:regionCells(rk)});
       }
     }
@@ -696,7 +661,7 @@
   function endGame(){
     gameOver = true;
     document.getElementById('overstat').textContent =
-      `${conquered.size} flowers grown · ${clearedSectors.size} patches bloomed`;
+      `${conquered.size} tiles conquered · ${clearedSectors.size} regions cleared`;
     document.getElementById('over').style.display='flex';
     save();
   }
